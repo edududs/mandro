@@ -61,5 +61,6 @@ A linguagem cresce em ciclos; cada um tem especificação, plano e implementaç�
 | 2     | `enum`, `escolha`, `Opcional`, `Resultado`, `leia`, `Decimal`         | planejado         |
 | 3     | classes, interfaces                                                   | planejado         |
 | 4     | coleções, genéricos, módulos                                          | planejado         |
+| Editor | extensão VS Code e Cursor: realce, LSP, formatador, lints, depuração | planejado         |
 
 O detalhe de cada ciclo está na seção 11 da especificação.

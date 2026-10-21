@@ -42,13 +42,13 @@ etapas do compilador até um executável, com contagem de referências real (sob
 - Interpolação de texto; embutidos `escreva`, `real`, `falha`.
 - Programas de um único arquivo.
 - Diagnósticos completos em português, `mandro explicar`, avisos.
-- CLI `mandro rodar`, `mandro compilar`, `mandro explicar`.
+- CLI `mandro rodar`, `mandro compilar`, `mandro verificar`, `mandro explicar`.
 
 ### 2.2 Fica fora (roadmap na seção 11)
 
 `enum`, `escolha`, `Opcional`, `Resultado`, `?`, `leia`, conversões que podem falhar, `Decimal`,
 classes, interfaces, coleções, genéricos do usuário, módulos, constantes globais, notação
-científica em literais, textos multilinha, threads.
+científica em literais, textos multilinha, threads, ferramentas de editor.
 
 ### 2.3 Decisões fixadas agora por compatibilidade futura
 
@@ -57,6 +57,8 @@ científica em literais, textos multilinha, threads.
   declarado ou exigido pelo contexto.
 - Erros recuperáveis serão `Resultado<T, E>` com `?`; `falha` existe só para bugs.
 - Classes não terão herança: polimorfismo por interfaces, reuso por composição.
+- O front-end também serve às ferramentas de editor (seção 11): o lexer preserva os comentários com
+  suas posições, e a análise produz HIR mesmo quando há erros (seção 4.3).
 
 ## 3. A linguagem no ciclo 1
 
@@ -280,11 +282,16 @@ depende de um crate posterior.
 
 Interfaces principais (esboço):
 
-- `mandro_syntax::lex(&SourceFile) -> (Vec<Token>, Vec<Diagnostic>)`
+- `mandro_syntax::lex(&SourceFile) -> Lexed` — tokens, comentários (lista separada, com posições)
+  e diagnósticos. Os comentários não chegam ao parser; existem para o formatador e o editor.
 - `mandro_syntax::parse(&SourceFile, &[Token]) -> (ast::Module, Vec<Diagnostic>)`
-- `mandro_sema::analyze(&ast::Module) -> Analysis` — `Analysis` traz `Option<hir::Module>` (ausente
-  quando há erro) e os diagnósticos, avisos incluídos.
-- `mandro_mir::lower(&hir::Module) -> mir::Program`
+- `mandro_sema::analyze(&ast::Module) -> Analysis` — `Analysis` traz o `hir::Module` **sempre**,
+  mesmo com erros (nós com erro têm o tipo *erro*), e os diagnósticos, avisos incluídos. Isso
+  permite ao editor mostrar tipos e navegar num arquivo que ainda tem erros.
+- `Analysis::checked(self) -> Result<CheckedModule, Vec<Diagnostic>>` — só uma análise sem erros
+  vira `CheckedModule`.
+- `mandro_mir::lower(&CheckedModule) -> mir::Program` — o tipo garante que o back-end nunca recebe
+  um programa com erro.
 - `mandro_mir::insert_rc(mir::Program) -> mir::Program`
 - `mandro_codegen_c::emit(&mir::Program, &SourceMap) -> String`
 - `mandro_driver::compile(&Path, &Options) -> Result<Artifact, Failure>`
@@ -460,6 +467,8 @@ Funções do usuário viram `mndr_fn_<nome>`; o `main` do C fica no runtime e ch
   repassando o código de saída do programa.
 - `mandro compilar <arquivo.mndr> [-o <saida>] [--emitir-c]` — gera o executável (padrão: nome do
   arquivo sem extensão, no diretório atual).
+- `mandro verificar <arquivo.mndr>` — roda só o front-end e mostra os diagnósticos, sem gerar
+  nada nem exigir compilador C. Serve para CI e editores.
 - `mandro explicar <codigo>` — mostra a explicação de um código de erro.
 - `--emitir-c` grava o `.c` ao lado do `.mndr`, com um comentário `/* app.mndr:LINHA */` antes do
   código de cada comando.
@@ -546,7 +555,20 @@ Cada ciclo tem spec, plano e implementação próprios. Ordem provável:
   construtores que validam invariantes, `publico`/`privado`, `interface`, `implementa`.
 - **Ciclo 4 — coleções e módulos:** `Lista`, `Mapa`, genéricos do usuário, múltiplos arquivos,
   `importe`.
+- **Etapa de editor (VS Code e Cursor)** — separada dos ciclos da linguagem, com spec própria:
+  - extensão VS Code com realce de sintaxe (gramática TextMate), configuração de linguagem
+    (comentários, pares de chaves, indentação) e trechos prontos; as palavras-chave da gramática são
+    geradas a partir da tabela única de `mandro_syntax` ou verificadas contra ela por teste;
+  - servidor de linguagem `mandro lsp` (protocolo LSP) sobre o mesmo front-end: erros enquanto se
+    digita, tipo ao passar o mouse, ir para a definição, autocompletar, renomear, realce semântico.
+    Cumpre o papel que o pyright tem para Python e o rust-analyzer para Rust; no Mandro o
+    verificador de tipos é o próprio compilador;
+  - formatador `mandro formatar` (como gofmt e ruff format), também exposto pelo LSP;
+  - lints configuráveis além dos avisos do compilador (como clippy e ruff);
+  - publicação no Visual Studio Marketplace e no Open VSX, de onde Cursor e VSCodium instalam;
+  - depuração: diretivas `#line` no C gerado deixam gdb e lldb pararem em linhas do `.mndr`,
+    integradas ao editor pelo protocolo de depuração (DAP);
+  - ordem sugerida: realce de sintaxe logo após o ciclo 1; LSP e formatador após o ciclo 2 ou 3.
 - **Depois:** `Dinheiro` na biblioteca padrão (valor + moeda, casas por moeda, rateio sem perda de
   centavos); remoção de retenções redundantes e Perceus; referências fracas ou coleta de ciclos;
-  distribuição (Windows, macOS, compilador C embutido); formatador; LSP; benchmarks contra Java e
-  Python.
+  distribuição (Windows, macOS, compilador C embutido); benchmarks contra Java e Python.
